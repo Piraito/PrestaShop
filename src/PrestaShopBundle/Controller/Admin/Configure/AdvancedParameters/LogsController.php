@@ -1,11 +1,12 @@
 <?php
 /**
- * 2007-2018 PrestaShop.
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -16,12 +17,11 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
 namespace PrestaShopBundle\Controller\Admin\Configure\AdvancedParameters;
@@ -29,11 +29,12 @@ namespace PrestaShopBundle\Controller\Admin\Configure\AdvancedParameters;
 use PrestaShop\PrestaShop\Core\Form\FormHandlerInterface;
 use PrestaShop\PrestaShop\Core\Search\Filters\LogsFilters;
 use PrestaShopBundle\Controller\Admin\FrameworkBundleAdminController;
+use PrestaShopBundle\Entity\Repository\LogRepository;
 use PrestaShopBundle\Security\Annotation\AdminSecurity;
 use PrestaShopBundle\Security\Annotation\DemoRestricted;
-use PrestaShopBundle\Entity\Repository\LogRepository;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Responsible of "Configure > Advanced Parameters > Logs" page display.
@@ -50,18 +51,16 @@ class LogsController extends FrameworkBundleAdminController
      *
      * @param LogsFilters $filters the list of filters from the request
      *
-     * @return \Symfony\Component\HttpFoundation\Response
+     * @return Response
      */
     public function indexAction(LogsFilters $filters)
     {
         $gridLogFactory = $this->get('prestashop.core.grid.log_factory');
         $grid = $gridLogFactory->getGrid($filters);
 
-        $gridPresenter = $this->get('prestashop.core.grid.presenter.grid_presenter');
-        $presentedGrid = $gridPresenter->present($grid);
-
         $logsByEmailForm = $this->getFormHandler()->getForm();
-        $twigValues = [
+
+        return $this->render('@PrestaShop/Admin/Configure/AdvancedParameters/LogsPage/index.html.twig', [
             'layoutHeaderToolbarBtn' => [],
             'layoutTitle' => $this->trans('Logs', 'Admin.Navigation.Menu'),
             'requireAddonsSearch' => true,
@@ -70,15 +69,13 @@ class LogsController extends FrameworkBundleAdminController
             'enableSidebar' => true,
             'help_link' => $this->generateSidebarLink('AdminLogs'),
             'logsByEmailForm' => $logsByEmailForm->createView(),
-            'grid' => $presentedGrid,
-        ];
-
-        return $this->render('@AdvancedParameters/LogsPage/logs.html.twig', $twigValues);
+            'grid' => $this->presentGrid($grid),
+        ]);
     }
 
     /**
-     * @AdminSecurity("is_granted(['read', 'update', 'create', 'delete'], request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs")
-     * @DemoRestricted(redirectRoute="admin_logs")
+     * @AdminSecurity("is_granted(['read', 'update', 'create', 'delete'], request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs_index")
+     * @DemoRestricted(redirectRoute="admin_logs_index")
      *
      * @param Request $request
      *
@@ -93,33 +90,31 @@ class LogsController extends FrameworkBundleAdminController
         $searchParametersForm = $gridFilterFormFactory->create($logsDefinition);
 
         $searchParametersForm->handleRequest($request);
-        $filters = array();
+        $filters = [];
 
-        $this->dispatchHook('actionAdminLogsControllerPostProcessBefore', array('controller' => $this));
+        $this->dispatchHook('actionAdminLogsControllerPostProcessBefore', ['controller' => $this]);
 
         if ($searchParametersForm->isSubmitted()) {
             $filters = $searchParametersForm->getData();
         }
 
-        return $this->redirectToRoute('admin_logs', array('filters' => $filters));
+        return $this->redirectToRoute('admin_logs_index', ['filters' => $filters]);
     }
 
     /**
-     * @AdminSecurity("is_granted(['read','update', 'create','delete'], request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs")
-     * @DemoRestricted(redirectRoute="admin_logs")
+     * @AdminSecurity("is_granted(['update', 'create','delete'], request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs_index")
+     * @DemoRestricted(redirectRoute="admin_logs_index")
      *
      * @param Request $request
      *
      * @return RedirectResponse
-     *
-     * @throws \Exception
      */
-    public function processFormAction(Request $request)
+    public function saveSettingsAction(Request $request)
     {
         $logsByEmailForm = $this->getFormHandler()->getForm();
         $logsByEmailForm->handleRequest($request);
 
-        $this->dispatchHook('actionAdminLogsControllerPostProcessBefore', array('controller' => $this));
+        $this->dispatchHook('actionAdminLogsControllerPostProcessBefore', ['controller' => $this]);
 
         if ($logsByEmailForm->isSubmitted()) {
             $data = $logsByEmailForm->getData();
@@ -129,17 +124,17 @@ class LogsController extends FrameworkBundleAdminController
             if (0 === count($saveErrors)) {
                 $this->addFlash('success', $this->trans('Successful update.', 'Admin.Notifications.Success'));
 
-                return $this->redirectToRoute('admin_logs');
+                return $this->redirectToRoute('admin_logs_index');
             }
 
             $this->flashErrors($saveErrors);
         }
 
-        return $this->redirectToRoute('admin_logs');
+        return $this->redirectToRoute('admin_logs_index');
     }
 
     /**
-     * @AdminSecurity("is_granted('delete', request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs")
+     * @AdminSecurity("is_granted('delete', request.get('_legacy_controller'))", message="You do not have permission to update this.", redirectRoute="admin_logs_index")
      *
      * @return RedirectResponse
      *
@@ -151,13 +146,13 @@ class LogsController extends FrameworkBundleAdminController
 
         $this->addFlash('success', $this->trans('Successful update.', 'Admin.Notifications.Success'));
 
-        return $this->redirectToRoute('admin_logs');
+        return $this->redirectToRoute('admin_logs_index');
     }
 
     /**
      * @return FormHandlerInterface the form handler to set the severity level
      */
-    private function getFormHandler()
+    private function getFormHandler(): FormHandlerInterface
     {
         return $this->get('prestashop.adapter.logs.form_handler');
     }

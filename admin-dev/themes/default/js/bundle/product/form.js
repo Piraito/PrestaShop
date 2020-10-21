@@ -1,10 +1,11 @@
 /**
- * 2007-2018 PrestaShop
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -15,12 +16,11 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
 $(document).ready(function() {
@@ -63,18 +63,31 @@ $(document).ready(function() {
     $(this).val(parsedValue);
   });
 
-  /** Attach date picker */
-  $('.datepicker').datetimepicker({
-    locale: full_language_code,
-    format: 'YYYY-MM-DD'
-  });
-
   /** tooltips should be hidden when we move to another tab */
   $('#form-nav').on('click','.nav-item', function clearTooltipsAndPopovers() {
     $('[data-toggle="tooltip"]').tooltip('hide');
     $('[data-toggle="popover"]').popover('hide');
   });
+
+  $('.summary-description-container a[data-toggle="tab"]').on('shown.bs.tab', resetEditor);
+  form.switchLanguage($('#form_switch_language').val());
 });
+
+/**
+ * Reset active tinyMce editor (triggered when switch language, or switching tabs)
+ */
+function resetEditor() {
+  const languageEditorsSelector = '.summary-description-container div.translation-field.active textarea.autoload_rte';
+  $(languageEditorsSelector).each(function(index, textarea) {
+    if (window.tinyMCE) {
+      const editor = window.tinyMCE.get(textarea.id);
+      if (editor) {
+        //Reset content to force refresh of editor
+        editor.setContent(editor.getContent());
+      }
+    }
+  });
+}
 
 /**
  * Manage show or hide fields
@@ -361,11 +374,13 @@ var formCategory = (function() {
 var featuresCollection = (function() {
 
   var collectionHolder = $('.feature-collection');
+  var maxCollectionChildren = collectionHolder.children('.row').length;
 
   /** Add a feature */
   function add() {
-    var newForm = collectionHolder.attr('data-prototype').replace(/__name__/g, collectionHolder.children('.row').length);
+    var newForm = collectionHolder.attr('data-prototype').replace(/__name__/g, maxCollectionChildren);
     collectionHolder.append(newForm);
+    maxCollectionChildren += 1;
     prestaShopUiKit.initSelects();
   }
 
@@ -383,12 +398,17 @@ var featuresCollection = (function() {
         e.preventDefault();
         var _this = $(this);
 
-        modalConfirmation.create(translate_javascripts['Are you sure to delete this?'], null, {
+        modalConfirmation.create(translate_javascripts['Are you sure you want to delete this item?'], null, {
           onContinue: function() {
             _this.closest('.product-feature').remove();
           }
         }).show();
       });
+
+      function replaceEndingIdFromUrl(url, newId)
+      {
+        return url.replace(/\/\d+(?!.*\/\d+)((?=\?.*))?/, '/' + newId);
+      }
 
       /** On feature selector event change, refresh possible values list */
       $(document).on('change', '.feature-collection select.feature-selector', function(event) {
@@ -398,7 +418,7 @@ var featuresCollection = (function() {
 
         if('' !== $(this).val()) {
           $.ajax({
-            url: $(this).attr('data-action').replace(/\/\d+(?=\?.*)/, '/' + $(this).val()),
+            url: replaceEndingIdFromUrl($(this).attr('data-action'), $(this).val()),
             success: function(response) {
               $selector.prop('disabled', response.length === 0);
               $selector.empty();
@@ -634,6 +654,7 @@ var form = (function() {
         $('ul.text-danger').remove();
         $('*.has-danger').removeClass('has-danger');
         $('#form-nav li.has-error').removeClass('has-error');
+        updateDisplayGlobalErrors(null);
       },
       success: function(response) {
         if (callBack) {
@@ -643,7 +664,7 @@ var form = (function() {
         //update the customization ids
         if (typeof response.customization_fields_ids != "undefined") {
           $.each(response.customization_fields_ids, function (k, v) {
-              $("#form_step6_custom_fields_" + k + "_id_customization_field").val(v);
+            $("#form_step6_custom_fields_" + k + "_id_customization_field").val(v);
           });
         }
 
@@ -680,12 +701,14 @@ var form = (function() {
           tabsWithErrors.push(key);
 
           var html = '<ul class="list-unstyled text-danger">';
-          $.each(errors, function(key, error) {
+          $.each(errors, function(unusedKey, error) {
             html += '<li>' + error + '</li>';
           });
           html += '</ul>';
 
-          if (key.match(/^combination_.*/)) {
+          if (0 === key.localeCompare('error')) {
+            updateDisplayGlobalErrors(html);
+          } else if (key.match(/^combination_.*/)) {
             $('#' + key).parent().addClass('has-danger').append(html);
           } else {
             $('#form_' + key).parent().addClass('has-danger').append(html);
@@ -733,23 +756,40 @@ var form = (function() {
     });
   }
 
-  function switchLanguage(iso_code) {
-    $('div.translations.tabbable > div > div.translation-field:not(.translation-label-' + iso_code + ')').removeClass('show active');
-    $('div.translations.tabbable > div > div.translation-field.translation-label-' + iso_code).addClass('show active');
+  function switchLanguage(isoCode) {
+    $(`div.translations.tabbable > div > div.translation-field:not(.translation-label-${isoCode})`)
+      .removeClass('show active');
+
+    $(`div.translations.tabbable > div > div.translation-field.translation-label-${isoCode}`).addClass('show active');
+    resetEditor();
   }
 
   function updateMissingTranslatedNames() {
-      var namesDiv = $('#form_step1_names');
-      var defaultLanguageValue = null;
-      $("input[id^='form_step1_name_']", namesDiv).each(function(index) {
-          var value = $(this).val();
-          // The first language is ALWAYS the employee language
-          if (0 === index) {
-              defaultLanguageValue = value;
-          } else if (0 === value.length) {
-              $(this).val(defaultLanguageValue);
-          }
-      });
+    var namesDiv = $('#form_step1_names');
+    var defaultLanguageValue = null;
+    $("input[id^='form_step1_name_']", namesDiv).each(function(index) {
+      var value = $(this).val();
+      // The first language is ALWAYS the employee language
+      if (0 === index) {
+        defaultLanguageValue = value;
+      } else if (0 === value.length) {
+        $(this).val(defaultLanguageValue);
+      }
+    });
+  }
+
+  /**
+   * Depending on the provided params, this method displays or hides
+   * an error panel with the form errors not linked to a specific field.
+   *
+   * @param {string} content The HTML content to display
+   */
+  function updateDisplayGlobalErrors(content) {
+    const target = $("#form_bubbling_errors");
+    target.html('');
+    if (content) {
+      target.html(`<div class="alert alert-danger">${content}</div>`);
+    }
   }
 
   return {
@@ -838,7 +878,7 @@ var form = (function() {
       $('.product-footer .delete', elem).click(function(e) {
         e.preventDefault();
         var _this = $(this);
-        modalConfirmation.create(translate_javascripts['Are you sure to delete this?'], null, {
+        modalConfirmation.create(translate_javascripts['Are you sure you want to delete this item?'], null, {
           onContinue: function() {
             window.location = _this.attr('href');
           }
@@ -886,10 +926,40 @@ var form = (function() {
         });
       };
 
-      /** On event "tokenfield:createtoken" : stop event if its not a typehead result */
+      /** On event "tokenfield:createtoken" : check values are valid if its not a typehead result */
       $('#form_step3_attributes').on('tokenfield:createtoken', function(e) {
-        if (!e.attrs.data && e.handleObj.origType !== 'tokenfield:createtoken') {
-          return false;
+        if (!e.attrs.data){
+          if (e.handleObj.origType !== 'tokenfield:createtoken') {
+            return false;
+          }
+
+          const orgLabel = e.attrs.label;
+          if (e.attrs.label === e.attrs.value) {
+            engine.search(e.attrs.label, function(result) {
+              if (result.length >= 1) {
+                e.attrs.label = result[0].label;
+                e.attrs.value = result[0].value;
+                e.attrs.data = [];
+                e.attrs.data['id_group'] = result[0].data.id_group;
+              }
+            });
+          } else {
+            const attr = $(`.js-attribute-checkbox[data-value="${e.attrs.value}"]`);
+
+            if (attr) {
+              e.attrs.label = attr.data('label');
+              e.attrs.value = attr.data('value');
+              e.attrs.data = [];
+              e.attrs.data['id_group'] = attr.data('group-id');
+            }
+          }
+
+          if(e.attrs.data && filter([e.attrs]).length === 0){
+            $('#form_step3_attributes-tokenfield').val((i, value) => {
+              return value.replace(orgLabel,"");
+            });
+            return false;
+          }
         }
       });
 
@@ -897,14 +967,16 @@ var form = (function() {
       $('#form_step3_attributes').on('tokenfield:createdtoken', function(e) {
         if (e.attrs.data) {
           $('#attributes-generator').append('<input type="hidden" id="attribute-generator-' + e.attrs.value + '" class="attribute-generator" value="' + e.attrs.value + '" name="options[' + e.attrs.data.id_group + '][' + e.attrs.value + ']" />');
-        } else if (e.handleObj.origType == 'tokenfield:createdtoken') {
-          $('#attributes-generator').append('<input type="hidden" id="attribute-generator-' + $('.js-attribute-checkbox[data-value="'+e.attrs.value+'"]').data('value') + '" class="attribute-generator" value="' + $('.js-attribute-checkbox[data-value="'+e.attrs.value+'"]').data('value') + '" name="options[' + $('.js-attribute-checkbox[data-value="'+e.attrs.value+'"]').data('group-id') + '][' + $('.js-attribute-checkbox[data-value="'+e.attrs.value+'"]').data('value') + ']" />');
+        } else {
+          $(e.relatedTarget).addClass('invalid');
         }
       });
 
       /** On event "tokenfield:removedtoken" : remove stored attributes input when remove token */
       $('#form_step3_attributes').on('tokenfield:removedtoken', function(e) {
-        $('#attribute-generator-' + e.attrs.value).remove();
+        if (!$(e.relatedTarget).hasClass('invalid')) {
+          $(`#attribute-generator-${e.attrs.value}`).remove();
+        }
       });
     });
     },
@@ -924,10 +996,12 @@ var form = (function() {
 var customFieldCollection = (function() {
 
   var collectionHolder = $('ul.customFieldCollection');
+  var maxCollectionChildren = collectionHolder.children().length;
 
   /** Add a custom field */
   function add() {
-    var newForm = collectionHolder.attr('data-prototype').replace(/__name__/g, collectionHolder.children().length);
+    var newForm = collectionHolder.attr('data-prototype').replace(/__name__/g, maxCollectionChildren);
+    maxCollectionChildren += 1;
     collectionHolder.append('<li>' + newForm + '</li>');
   }
 
@@ -944,7 +1018,7 @@ var customFieldCollection = (function() {
         e.preventDefault();
         var _this = $(this);
 
-        modalConfirmation.create(translate_javascripts['Are you sure to delete this?'], null, {
+        modalConfirmation.create(translate_javascripts['Are you sure you want to delete this item?'], null, {
           onContinue: function() {
             _this.parent().parent().parent().remove();
           }
@@ -1024,7 +1098,7 @@ var virtualProduct = (function() {
         e.preventDefault();
         var $deleteButton = $(this);
 
-        modalConfirmation.create(translate_javascripts['Are you sure to delete this?'], null, {
+        modalConfirmation.create(translate_javascripts['Are you sure you want to delete this item?'], null, {
           onContinue: function() {
             getOnDeleteVirtualProductFileHandler($deleteButton);
           }
@@ -1111,15 +1185,6 @@ var attachmentProduct = (function() {
       var buttonSave = $('#form_step6_attachment_product_add');
       var buttonCancel = $('#form_step6_attachment_product_cancel');
 
-      /** check all attachments files */
-      $('#product-attachment-files-check').change(function() {
-        if ($(this).is(":checked")) {
-          $('#product-attachment-file input[type="checkbox"]').prop('checked', true);
-        } else {
-          $('#product-attachment-file input[type="checkbox"]').prop('checked', false);
-        }
-      });
-
       buttonCancel.click(function (){
         resetAttachmentForm();
       });
@@ -1128,6 +1193,11 @@ var attachmentProduct = (function() {
         $('#form_step6_attachment_product_file').val('');
         $('#form_step6_attachment_product_name').val('');
         $('#form_step6_attachment_product_description').val('');
+      }
+
+      function replaceEndingIdFromUrl(url, newId)
+      {
+        return url.replace(/\/\d+(?!.*\/\d+)((?=\?.*))?/, '/' + newId);
       }
 
       /** add attachment */
@@ -1143,7 +1213,7 @@ var attachmentProduct = (function() {
 
         $.ajax({
           type: 'POST',
-          url: $('#form_step6_attachment_product').attr('data-action').replace(/\/\d+(?=\?.*)/, '/' + id_product),
+          url: replaceEndingIdFromUrl($('#form_step6_attachment_product').attr('data-action'), id_product),
           data: data,
           contentType: false,
           processData: false,
@@ -1269,6 +1339,7 @@ var imagesProduct = (function() {
         thumbnailWidth: 250,
         thumbnailHeight: null,
         acceptedFiles: 'image/*',
+        timeout: 0,
         dictRemoveFile: translate_javascripts['Delete'],
         dictFileTooBig: translate_javascripts['ToLargeFile'],
         dictCancelUpload: translate_javascripts['Delete'],
@@ -1288,7 +1359,7 @@ var imagesProduct = (function() {
         success: function(file, response) {
           //manage error on uploaded file
           if (response.error !== 0) {
-            errorElem.append('<p>' + file.name + ': ' + response.error + '</p>');
+            errorElem.append($('<p></p>').text(file.name + ': ' + response.error));
             this.removeFile(file);
             return;
           }
@@ -1317,7 +1388,7 @@ var imagesProduct = (function() {
           }
 
           //append new error
-          errorElem.append('<p>' + file.name + ': ' + message + '</p>');
+          errorElem.append($('<p></p>').text(file.name + ': ' + message));
 
           //remove uploaded item
           this.removeFile(file);
@@ -1467,7 +1538,7 @@ var formImagesProduct = (function() {
       });
     },
     'delete': function(id) {
-      modalConfirmation.create(translate_javascripts['Are you sure to delete this?'], null, {
+      modalConfirmation.create(translate_javascripts['Are you sure you want to delete this item?'], null, {
         onContinue: function() {
           $.ajax({
             url: dropZoneElem.find('.dz-preview[data-id="' + id + '"]').attr('url-delete'),

@@ -1,11 +1,12 @@
 <?php
 /**
- * 2007-2018 PrestaShop
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -16,12 +17,11 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
 /**
@@ -71,7 +71,15 @@ class ReleaseCreator
      *
      * @var array
      */
-    protected $filesRemoveList = ['.DS_Store', '.gitignore', '.gitmodules', '.travis.yml'];
+    protected $filesRemoveList = [
+        '.DS_Store',
+        '.gitignore',
+        '.gitmodules',
+        '.travis.yml',
+        'package-lock.json',
+        '.babelrc',
+        'postcss.config.js',
+    ];
 
     /**
      * Folders to remove.
@@ -86,7 +94,7 @@ class ReleaseCreator
      * @var array
      */
     protected $patternsRemoveList = [
-        'tests$',
+        'tests(\-legacy)?$',
         'tools/contrib$',
         'travis\-scripts$',
         'CONTRIBUTING\.md$',
@@ -111,13 +119,13 @@ class ReleaseCreator
         'app/cache/..*$',
         '\.t9n\.yml$',
         '\.scrutinizer\.yml$',
-        'admin\-dev/(.*/)?webpack\.config\.js$',
-        'admin\-dev/(.*/)?package\.json$',
-        'admin\-dev/(.*/)?bower\.json$',
-        'admin\-dev/(.*/)?config\.rb$',
-        'admin\-dev/themes/default/sass$',
-        'admin\-dev/themes/new\-theme/js$',
-        'admin\-dev/themes/new\-theme/scss$',
+        'admin/(.*/)?webpack\.config\.js$',
+        'admin/(.*/)?package\.json$',
+        'admin/(.*/)?bower\.json$',
+        'admin/(.*/)?config\.rb$',
+        'admin/themes/default/sass$',
+        //'admin/themes/new\-theme/js$',
+        'admin/themes/new\-theme/scss$',
         'themes/_core$',
         'themes/classic/_dev',
         'themes/webpack\.config\.js$',
@@ -127,7 +135,14 @@ class ReleaseCreator
         'app/cache/..*$',
         '.idea',
         'tools/build$',
+        'tools/foreignkeyGenerator$',
         '.*node_modules.*',
+        '\.eslintignore$',
+        '\.eslintrc\.js$',
+        '\.php_cs\.dist$',
+        'docker-compose\.yml$',
+        'tools/assets$',
+        '\.webpack$',
     ];
 
     /**
@@ -195,7 +210,7 @@ class ReleaseCreator
      * @param bool $useZip
      * @param string $destinationDir
      */
-    public function __construct($version, $useInstaller = true, $useZip = true, $destinationDir = '')
+    public function __construct($version = null, $useInstaller = true, $useZip = true, $destinationDir = '')
     {
         $this->consoleWriter = new ConsoleWriter();
         $tmpDir = sys_get_temp_dir();
@@ -206,8 +221,12 @@ class ReleaseCreator
             ConsoleWriter::COLOR_GREEN
         );
         $this->projectPath = realpath(__DIR__ . '/../../..');
-        $this->version = $version;
+        $this->version = $version ? $version : $this->getCurrentVersion();
         $this->zipFileName = "prestashop_$this->version.zip";
+
+        if (empty($this->version)) {
+            throw new Exception('Version is not provided and cannot be found in project.');
+        }
 
         if (empty($destinationDir)) {
             $releasesDir = self::RELEASES_DIR_RELATIVE_PATH;
@@ -227,12 +246,12 @@ class ReleaseCreator
                 "--- Release will have the installer and will be zipped.{$this->lineSeparator}",
                 ConsoleWriter::COLOR_GREEN
             );
-        } else if ($this->useZip) {
+        } elseif ($this->useZip) {
             $this->consoleWriter->displayText(
                 "--- Release will be zipped.{$this->lineSeparator}",
                 ConsoleWriter::COLOR_GREEN
             );
-        } else if ($this->useInstaller) {
+        } elseif ($this->useInstaller) {
             $this->consoleWriter->displayText(
                 "--- Release will have the installer.{$this->lineSeparator}",
                 ConsoleWriter::COLOR_GREEN
@@ -261,6 +280,7 @@ class ReleaseCreator
             ->setupShopVersion()
             ->generateLicensesFile()
             ->runComposerInstall()
+            ->runBuildAssets()
             ->createPackage();
         $endTime = date('H:i:s');
         $this->consoleWriter->displayText(
@@ -333,14 +353,34 @@ class ReleaseCreator
     {
         $configDefinesPath = $this->tempProjectPath . '/config/defines.inc.php';
         $configDefinesContent = file_get_contents($configDefinesPath);
-        $configDefinesNewContent = preg_replace('/(.*(define).*)_PS_MODE_DEV_(.*);/Ui', 'define(\'_PS_MODE_DEV_\', false);', $configDefinesContent);
-        $configDefinesNewContent = preg_replace('/(.*)_PS_DISPLAY_COMPATIBILITY_WARNING_(.*);/Ui', 'define(\'_PS_DISPLAY_COMPATIBILITY_WARNING_\', false);', $configDefinesNewContent);
+        $configDefinesNewContent = preg_replace('/(.*(define).*)["\']_PS_MODE_DEV_["\'](.*);/Ui', 'define(\'_PS_MODE_DEV_\', false);', $configDefinesContent);
+        $configDefinesNewContent = preg_replace('/(.*)["\']_PS_DISPLAY_COMPATIBILITY_WARNING_["\'](.*);/Ui', 'define(\'_PS_DISPLAY_COMPATIBILITY_WARNING_\', false);', $configDefinesNewContent);
 
         if (!file_put_contents($configDefinesPath, $configDefinesNewContent)) {
             throw new BuildException("Unable to update contents of '$configDefinesPath'");
         }
 
         return $this;
+    }
+
+    /**
+     * Get the current version in the project
+     *
+     * @return string PrestaShop version
+     */
+    protected function getCurrentVersion()
+    {
+        $kernelFile = $this->projectPath.'/app/AppKernel.php';
+        $matches = [];
+
+        $kernelFileContent = file_get_contents($kernelFile);
+        $kernelFileContent = preg_match(
+            '~const VERSION = \'(.*)\';~',
+            $kernelFileContent,
+            $matches
+        );
+
+        return $matches[1];
     }
 
     /**
@@ -353,7 +393,6 @@ class ReleaseCreator
     {
         $kernelFile = $this->tempProjectPath.'/app/AppKernel.php';
         $version = new Version($this->version);
-
 
         $kernelFileContent = file_get_contents($kernelFile);
         $kernelFileContent = preg_replace(
@@ -471,9 +510,32 @@ class ReleaseCreator
         $command = "cd {$argProjectPath} && export SYMFONY_ENV=prod && composer install --no-dev --optimize-autoloader --classmap-authoritative --no-interaction 2>&1";
         exec($command, $output, $returnCode);
 
-        if ($returnCode != 0) {
+        if ($returnCode !== 0) {
             throw new BuildException('Unable to run composer install.');
         }
+
+        $this->consoleWriter->displayText(" DONE{$this->lineSeparator}", ConsoleWriter::COLOR_GREEN);
+
+        return $this;
+    }
+
+    /**
+     * Build assets.
+     *
+     * @return $this
+     * @throws BuildException
+     */
+    protected function runBuildAssets()
+    {
+        $this->consoleWriter->displayText("Running build assets...", ConsoleWriter::COLOR_YELLOW);
+        $argProjectPath = escapeshellarg($this->tempProjectPath);
+        $command = "cd {$argProjectPath} && make assets 2>&1";
+        exec($command, $output, $returnCode);
+
+        if ($returnCode !== 0) {
+            throw new BuildException('Unable to build assets.');
+        }
+
         $this->consoleWriter->displayText(" DONE{$this->lineSeparator}", ConsoleWriter::COLOR_GREEN);
 
         return $this;
@@ -621,6 +683,7 @@ class ReleaseCreator
                     if ($folder.'/'.$file_to_remove == $value) {
                         unset($filesList[$key]);
                         exec("rm -f {$argValue}");
+
                         continue 2;
                     }
                 }
@@ -630,6 +693,7 @@ class ReleaseCreator
                     if ($folder.'/'.$folder_to_remove == $value) {
                         unset($filesList[$key]);
                         exec("rm -rf {$argValue}");
+
                         continue 2;
                     }
                 }
@@ -639,6 +703,7 @@ class ReleaseCreator
                     if (preg_match('#'.$pattern_to_remove.'#', $value) == 1) {
                         unset($filesList[$key]);
                         exec("rm -rf {$argValue}");
+
                         continue 2;
                     }
                 }
@@ -650,6 +715,7 @@ class ReleaseCreator
                     if ($folder.'/'.$folder_to_remove == $key) {
                         unset($filesList[$key]);
                         exec("rm -rf {$argKey}");
+
                         continue 2;
                     }
                 }
@@ -659,6 +725,7 @@ class ReleaseCreator
                     if (preg_match('#'.$pattern_to_remove.'#', $key) == 1) {
                         unset($filesList[$key]);
                         exec("rm -rf {$argKey}");
+
                         continue 2;
                     }
                 }

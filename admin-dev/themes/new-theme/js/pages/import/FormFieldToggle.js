@@ -1,10 +1,11 @@
 /**
- * 2007-2018 PrestaShop
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -15,15 +16,14 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
-const $ = window.$;
+const {$} = window;
 
 const entityCategories = 0;
 const entityProducts = 1;
@@ -37,15 +37,15 @@ const entityStoreContacts = 8;
 
 export default class FormFieldToggle {
   constructor() {
-    $('.js-entity-select').on('change', this.toggleForm.bind(this));
+    $('.js-entity-select').on('change', () => this.toggleForm());
 
     this.toggleForm();
   }
 
   toggleForm() {
-    let selectedOption = $('#entity').find('option:selected');
-    let selectedEntity = parseInt(selectedOption.val());
-    let entityName = selectedOption.text().toLowerCase();
+    const selectedOption = $('#entity').find('option:selected');
+    const selectedEntity = parseInt(selectedOption.val(), 10);
+    const entityName = selectedOption.text().toLowerCase();
 
     this.toggleEntityAlert(selectedEntity);
     this.toggleFields(selectedEntity, entityName);
@@ -58,7 +58,7 @@ export default class FormFieldToggle {
    * @param {int} selectedEntity
    */
   toggleEntityAlert(selectedEntity) {
-    let $alert = $('.js-entity-alert');
+    const $alert = $('.js-entity-alert');
 
     if ([entityCategories, entityProducts].includes(selectedEntity)) {
       $alert.show();
@@ -97,7 +97,7 @@ export default class FormFieldToggle {
       entityProducts,
       entityBrands,
       entitySuppliers,
-      entityStoreContacts
+      entityStoreContacts,
     ].includes(selectedEntity)
     ) {
       $regenerateFormGroup.show();
@@ -113,7 +113,7 @@ export default class FormFieldToggle {
       entityBrands,
       entitySuppliers,
       entityStoreContacts,
-      entityAlias
+      entityAlias,
     ].includes(selectedEntity)
     ) {
       $forceIdsFormGroup.show();
@@ -130,26 +130,74 @@ export default class FormFieldToggle {
    * @param {int} entity
    */
   loadAvailableFields(entity) {
-    const url = -1 === window.location.href.indexOf('index.php') ? '../../../ajax.php' : '../../../../ajax.php';
+    const $availableFields = $('.js-available-fields');
 
     $.ajax({
-      url: url,
+      url: $availableFields.data('url'),
       data: {
-        getAvailableFields: 1,
-        entity: entity
+        entity,
       },
       dataType: 'json',
-    }).then(response => {
-      let fields = '';
-      let $availableFields = $('.js-available-fields');
-      $availableFields.empty();
+    }).then((response) => {
+      this.removeAvailableFields($availableFields);
 
-      for (let i = 0; i < response.length; i++) {
-        fields += response[i].field;
+      for (let i = 0; i < response.length; i += 1) {
+        this.appendAvailableField(
+          $availableFields,
+          response[i].label + (response[i].required ? '*' : ''),
+          response[i].description,
+        );
       }
 
-      $availableFields.html(fields);
       $availableFields.find('[data-toggle="popover"]').popover();
     });
+  }
+
+  /**
+   * Remove available fields content from given container.
+   *
+   * @param {jQuery} $container
+   * @private
+   */
+  removeAvailableFields($container) {
+    $container.find('[data-toggle="popover"]').popover('hide');
+    $container.empty();
+  }
+
+  /**
+   * Append a help box to given field.
+   *
+   * @param {jQuery} $field
+   * @param {String} helpBoxContent
+   * @private
+   */
+  appendHelpBox($field, helpBoxContent) {
+    const $helpBox = $('.js-available-field-popover-template').clone();
+
+    $helpBox.attr('data-content', helpBoxContent);
+    $helpBox.removeClass('js-available-field-popover-template d-none');
+    $field.append($helpBox);
+  }
+
+  /**
+   * Append available field to given container.
+   *
+   * @param {jQuery} $appendTo field will be appended to this container.
+   * @param {String} fieldText
+   * @param {String} helpBoxContent
+   * @private
+   */
+  appendAvailableField($appendTo, fieldText, helpBoxContent) {
+    const $field = $('.js-available-field-template').clone();
+
+    $field.text(fieldText);
+
+    if (helpBoxContent) {
+      // Append help box next to the field
+      this.appendHelpBox($field, helpBoxContent);
+    }
+
+    $field.removeClass('js-available-field-template d-none');
+    $field.appendTo($appendTo);
   }
 }

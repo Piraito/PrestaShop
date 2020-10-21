@@ -1,11 +1,12 @@
 <?php
 /**
- * 2007-2018 PrestaShop.
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -16,12 +17,11 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
 namespace PrestaShopBundle\Form\Admin\Configure\ShopParameters\General;
@@ -29,10 +29,10 @@ namespace PrestaShopBundle\Form\Admin\Configure\ShopParameters\General;
 use PrestaShop\PrestaShop\Adapter\Entity\Order;
 use PrestaShopBundle\Form\Admin\Type\SwitchType;
 use PrestaShopBundle\Form\Admin\Type\TranslatorAwareType;
-use Symfony\Component\Form\Extension\Core\Type\IntegerType;
-use Symfony\Component\OptionsResolver\OptionsResolver;
-use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Translation\TranslatorInterface;
 
 /**
  * Class returning the content of the form in the maintenance page.
@@ -40,6 +40,42 @@ use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
  */
 class PreferencesType extends TranslatorAwareType
 {
+    /**
+     * @var bool
+     */
+    private $isMultistoreUsed;
+
+    /**
+     * @var bool
+     */
+    private $isSingleShopContext;
+
+    /**
+     * @var bool
+     */
+    private $isAllShopContext;
+
+    /**
+     * @param TranslatorInterface $translator
+     * @param array $locales
+     * @param bool $isMultistoreUsed
+     * @param bool $isSingleShopContext
+     * @param bool $isAllShopContext
+     */
+    public function __construct(
+        TranslatorInterface $translator,
+        array $locales,
+        $isMultistoreUsed,
+        $isSingleShopContext,
+        $isAllShopContext
+    ) {
+        parent::__construct($translator, $locales);
+
+        $this->isMultistoreUsed = $isMultistoreUsed;
+        $this->isSingleShopContext = $isSingleShopContext;
+        $this->isAllShopContext = $isAllShopContext;
+    }
+
     /**
      * @var bool
      */
@@ -61,7 +97,9 @@ class PreferencesType extends TranslatorAwareType
             ->add('enable_ssl_everywhere', SwitchType::class, [
                 'disabled' => !$isSslEnabled,
             ])
-            ->add('enable_token', SwitchType::class)
+            ->add('enable_token', SwitchType::class, [
+                'disabled' => !$this->isContextDependantOptionEnabled(),
+            ])
             ->add('allow_html_iframes', SwitchType::class)
             ->add('use_htmlpurifier', SwitchType::class)
             ->add('price_round_mode', ChoiceType::class, [
@@ -83,14 +121,12 @@ class PreferencesType extends TranslatorAwareType
                     'Round on the total' => Order::ROUND_TOTAL,
                 ],
             ])
-            ->add('price_display_precision', IntegerType::class, [
-                'attr' => [
-                    'min' => 0,
-                ],
-            ])
             ->add('display_suppliers', SwitchType::class)
+            ->add('display_manufacturers', SwitchType::class)
             ->add('display_best_sellers', SwitchType::class)
-            ->add('multishop_feature_active', SwitchType::class)
+            ->add('multishop_feature_active', SwitchType::class, [
+                'disabled' => !$this->isContextDependantOptionEnabled(),
+            ])
             ->add('shop_activity', ChoiceType::class, [
                 'required' => false,
                 'choices_as_values' => true,
@@ -147,5 +183,19 @@ class PreferencesType extends TranslatorAwareType
     public function getBlockPrefix()
     {
         return 'preferences';
+    }
+
+    /**
+     * Check if option which depends on multistore context can be changed.
+     *
+     * @return bool
+     */
+    protected function isContextDependantOptionEnabled()
+    {
+        if (!$this->isMultistoreUsed && $this->isSingleShopContext) {
+            return true;
+        }
+
+        return $this->isAllShopContext;
     }
 }

@@ -1,10 +1,11 @@
 /**
- * 2007-2018 PrestaShop.
+ * Copyright since 2007 PrestaShop SA and Contributors
+ * PrestaShop is an International Registered Trademark & Property of PrestaShop SA
  *
  * NOTICE OF LICENSE
  *
  * This source file is subject to the Open Software License (OSL 3.0)
- * that is bundled with this package in the file LICENSE.txt.
+ * that is bundled with this package in the file LICENSE.md.
  * It is also available through the world-wide-web at this URL:
  * https://opensource.org/licenses/OSL-3.0
  * If you did not receive a copy of the license and are unable to
@@ -15,15 +16,14 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://devdocs.prestashop.com/ for more information.
  *
- * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @author    PrestaShop SA and Contributors <contact@prestashop.com>
+ * @copyright Since 2007 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
- * International Registered Trademark & Property of PrestaShop SA
  */
 
-const $ = window.$;
+const {$} = window;
 
 /**
  * Module Admin Page Controller.
@@ -39,7 +39,6 @@ class AdminModuleController {
     this.moduleCardController = moduleCardController;
 
     this.DEFAULT_MAX_RECENTLY_USED = 10;
-    this.DEFAULT_MAX_PER_CATEGORIES = 6;
     this.DISPLAY_GRID = 'grid';
     this.DISPLAY_LIST = 'list';
     this.CATEGORY_RECENTLY_USED = 'recently-used';
@@ -67,9 +66,7 @@ class AdminModuleController {
     this.addonsCardGrid = null;
     this.addonsCardList = null;
 
-    // See more & See less selector
-    this.seeMoreSelector = '.module-short-list .see-more';
-    this.seeLessSelector = '.module-short-list .see-less';
+    this.moduleShortList = '.module-short-list';
 
     // Selectors into vars to make it easier to change them while keeping same code logic
     this.moduleItemGridSelector = '.module-item-grid';
@@ -154,7 +151,6 @@ class AdminModuleController {
     this.initFilterStatusDropdown();
     this.fetchModulesList();
     this.getNotificationsCount();
-    this.initializeSeeMore();
   }
 
   initFilterStatusDropdown() {
@@ -186,10 +182,10 @@ class AdminModuleController {
       const selector = $(self.bulkActionDropDownSelector);
       if ($(self.getBulkCheckboxesCheckedSelector()).length > 0) {
         selector.closest('.module-top-menu-item')
-                .removeClass('disabled');
+          .removeClass('disabled');
       } else {
         selector.closest('.module-top-menu-item')
-                .addClass('disabled');
+          .addClass('disabled');
       }
     });
 
@@ -224,16 +220,11 @@ class AdminModuleController {
 
   initBOEventRegistering() {
     window.BOEvent.on('Module Disabled', this.onModuleDisabled, this);
-    window.BOEvent.on('Module Uninstalled', this.updateTotalResults, this);
   }
 
   onModuleDisabled() {
     const self = this;
-    const moduleItemSelector = self.getModuleItemSelector();
-
-    $('.modules-list').each(function scanModulesList() {
-      self.updateTotalResults();
-    });
+    self.getModuleItemSelector();
   }
 
   initPlaceholderMechanism() {
@@ -269,14 +260,14 @@ class AdminModuleController {
 
         if (stylesheet.insertRule) {
           stylesheet.insertRule(
-            requiredSelectorCombination +
-            stylesheetRule, stylesheet.cssRules.length
+            requiredSelectorCombination
+            + stylesheetRule, stylesheet.cssRules.length,
           );
         } else if (stylesheet.addRule) {
           stylesheet.addRule(
             requiredSelectorCombination,
             stylesheetRule,
-            -1
+            -1,
           );
         }
 
@@ -366,15 +357,17 @@ class AdminModuleController {
       }
     }
 
-
     const currentCompare = (a, b) => {
       let aData = a[key];
       let bData = b[key];
       if (key === 'access') {
         aData = (new Date(aData)).getTime();
         bData = (new Date(bData)).getTime();
-        aData = isNaN(aData) ? 0 : aData;
-        bData = isNaN(bData) ? 0 : bData;
+        aData = Number.isNaN(aData) ? 0 : aData;
+        bData = Number.isNaN(bData) ? 0 : bData;
+        if (aData === bData) {
+          return b.name.localeCompare(a.name);
+        }
       }
 
       if (aData < bData) return -1;
@@ -394,16 +387,20 @@ class AdminModuleController {
 
     $('.module-short-list').each(function setShortListVisibility() {
       const container = $(this);
+      const nbModulesInContainer = container.find('.module-item').length;
       if (
         (
           self.currentRefCategory
           && self.currentRefCategory !== String(container.find('.modules-list').data('name'))
         ) || (
           self.currentRefStatus !== null
-          && container.find('.module-item').length === 0
+          && nbModulesInContainer === 0
         ) || (
-          container.find('.module-item').length === 0 &&
-          String(container.find('.modules-list').data('name')) === self.CATEGORY_RECENTLY_USED
+          nbModulesInContainer === 0
+          && String(container.find('.modules-list').data('name')) === self.CATEGORY_RECENTLY_USED
+        ) || (
+          self.currentTagsList.length > 0
+          && nbModulesInContainer === 0
         )
       ) {
         container.hide();
@@ -411,11 +408,6 @@ class AdminModuleController {
       }
 
       container.show();
-      if (container.find('.module-item').length >= self.DEFAULT_MAX_RECENTLY_USED) {
-        container.find(`${this.seeMoreSelector}, ${this.seeLessSelector}`).show();
-      } else {
-        container.find(`${this.seeMoreSelector}, ${this.seeLessSelector}`).hide();
-      }
     });
   }
 
@@ -436,15 +428,24 @@ class AdminModuleController {
 
     const modulesListLength = self.modulesList.length;
     const counter = {};
+    const checkTag = (index, value) => {
+      newValue = value.toLowerCase();
+      tagExists |= (
+        currentModule.name.indexOf(newValue) !== -1
+        || currentModule.description.indexOf(newValue) !== -1
+        || currentModule.author.indexOf(newValue) !== -1
+        || currentModule.techName.indexOf(newValue) !== -1
+      );
+    };
 
     for (let i = 0; i < modulesListLength; i += 1) {
       currentModule = self.modulesList[i];
       if (currentModule.display === self.currentDisplay) {
         isVisible = true;
 
-        moduleCategory = self.currentRefCategory === self.CATEGORY_RECENTLY_USED ?
-                         self.CATEGORY_RECENTLY_USED :
-                         currentModule.categories;
+        moduleCategory = self.currentRefCategory === self.CATEGORY_RECENTLY_USED
+          ? self.CATEGORY_RECENTLY_USED
+          : currentModule.categories;
 
         // Check for same category
         if (self.currentRefCategory !== null) {
@@ -459,22 +460,14 @@ class AdminModuleController {
         // Check for tag list
         if (self.currentTagsList.length) {
           tagExists = false;
-          $.each(self.currentTagsList, (index, value) => {
-            newValue = value.toLowerCase();
-            tagExists |= (
-              currentModule.name.indexOf(newValue) !== -1
-              || currentModule.description.indexOf(newValue) !== -1
-              || currentModule.author.indexOf(newValue) !== -1
-              || currentModule.techName.indexOf(newValue) !== -1
-            );
-          });
+          $.each(self.currentTagsList, checkTag);
           isVisible &= tagExists;
         }
 
         /**
-         * If list display we must display only the first 5 modules
+         * If list display without search we must display only the first 5 modules
          */
-        if (self.currentDisplay === self.DISPLAY_LIST) {
+        if (self.currentDisplay === self.DISPLAY_LIST && !self.currentTagsList.length) {
           if (self.currentCategoryDisplay[moduleCategory] === undefined) {
             self.currentCategoryDisplay[moduleCategory] = false;
           }
@@ -487,8 +480,6 @@ class AdminModuleController {
             if (counter[moduleCategory] >= self.DEFAULT_MAX_RECENTLY_USED) {
               isVisible &= self.currentCategoryDisplay[moduleCategory];
             }
-          } else if (counter[moduleCategory] >= self.DEFAULT_MAX_PER_CATEGORIES) {
-            isVisible &= self.currentCategoryDisplay[moduleCategory];
           }
 
           counter[moduleCategory] += 1;
@@ -510,8 +501,6 @@ class AdminModuleController {
     if (self.currentTagsList.length) {
       $('.modules-list').append(this.currentDisplay === self.DISPLAY_GRID ? this.addonsCardGrid : this.addonsCardList);
     }
-
-    self.updateTotalResults();
   }
 
   initPageChangeProtection() {
@@ -519,8 +508,11 @@ class AdminModuleController {
 
     $(window).on('beforeunload', () => {
       if (self.isUploadStarted === true) {
-        return 'It seems some critical operation are running, are you sure you want to change page ? It might cause some unexepcted behaviors.';
+        return 'It seems some critical operation are running, are you sure you want to change page? '
+          + 'It might cause some unexepcted behaviors.';
       }
+
+      return undefined;
     });
   }
 
@@ -575,10 +567,10 @@ class AdminModuleController {
         beforeSend: () => {
           $(self.addonsLoginButtonSelector).show();
           $('button.btn[type="submit"]', self.addonsConnectForm).hide();
-        }
+        },
       }).done((response) => {
         if (response.success === 1) {
-          location.reload();
+          window.location.reload();
         } else {
           $.growl.error({message: response.message});
           $(self.addonsLoginButtonSelector).hide();
@@ -605,6 +597,7 @@ class AdminModuleController {
       'click',
       this.moduleImportFailureRetrySelector,
       () => {
+        /* eslint-disable-next-line max-len */
         $(`${self.moduleImportSuccessSelector},${self.moduleImportFailureSelector},${self.moduleImportProcessingSelector}`).fadeOut(() => {
           /**
            * Added timeout for a better render of animation
@@ -618,7 +611,7 @@ class AdminModuleController {
             });
           }, 550);
         });
-      }
+      },
     );
 
     // Reinit modal on exit, but check if not already processing something
@@ -643,7 +636,7 @@ class AdminModuleController {
           event.stopPropagation();
           event.preventDefault();
         }
-      }
+      },
     );
 
     body.on('click', this.moduleImportSelectFileManualSelector, (event) => {
@@ -779,7 +772,7 @@ class AdminModuleController {
    */
   displayPrestaTrustStep(result) {
     const self = this;
-    const modal = this.moduleCardController.replacePrestaTrustPlaceholders(result);
+    const modal = self.moduleCardController.replacePrestaTrustPlaceholders(result);
     const moduleName = result.module.attributes.name;
 
     $(this.moduleImportConfirmSelector).html(modal.find('.modal-body').html()).fadeIn();
@@ -792,35 +785,35 @@ class AdminModuleController {
 
       // Install ajax call
       $.post(result.module.attributes.urls.install, {'actionParams[confirmPrestaTrust]': '1'})
-       .done((data) => {
-         self.displayOnUploadDone(data[moduleName]);
-       })
-       .fail((data) => {
-         self.displayOnUploadError(data[moduleName]);
-       })
-       .always(() => {
-         self.isUploadStarted = false;
-       });
+        .done((data) => {
+          self.displayOnUploadDone(data[moduleName]);
+        })
+        .fail((data) => {
+          self.displayOnUploadError(data[moduleName]);
+        })
+        .always(() => {
+          self.isUploadStarted = false;
+        });
     });
   }
 
   getBulkCheckboxesSelector() {
     return this.currentDisplay === this.DISPLAY_GRID
-         ? this.bulkActionCheckboxGridSelector
-         : this.bulkActionCheckboxListSelector;
+      ? this.bulkActionCheckboxGridSelector
+      : this.bulkActionCheckboxListSelector;
   }
 
 
   getBulkCheckboxesCheckedSelector() {
     return this.currentDisplay === this.DISPLAY_GRID
-         ? this.checkedBulkActionGridSelector
-         : this.checkedBulkActionListSelector;
+      ? this.checkedBulkActionGridSelector
+      : this.checkedBulkActionListSelector;
   }
 
   getModuleItemSelector() {
     return this.currentDisplay === this.DISPLAY_GRID
-         ? this.moduleItemGridSelector
-         : this.moduleItemListSelector;
+      ? this.moduleItemGridSelector
+      : this.moduleItemListSelector;
   }
 
   /**
@@ -831,7 +824,7 @@ class AdminModuleController {
     const self = this;
     $.getJSON(
       window.moduleURLs.notificationsCount,
-      self.updateNotificationsCount
+      self.updateNotificationsCount,
     ).fail(() => {
       console.error('Could not retrieve module notifications count.');
     });
@@ -843,13 +836,11 @@ class AdminModuleController {
       to_update: $('#subtab-AdminModulesUpdates'),
     };
 
-    for (let key in destinationTabs) {
-      if (destinationTabs[key].length === 0) {
-        continue;
+    Object.keys(destinationTabs).forEach((destinationKey) => {
+      if (destinationTabs[destinationKey].length !== 0) {
+        destinationTabs[destinationKey].find('.notification-counter').text(badge[destinationKey]);
       }
-
-      destinationTabs[key].find('.notification-counter').text(badge[key]);
-    }
+    });
   }
 
   initAddonsSearch() {
@@ -864,7 +855,7 @@ class AdminModuleController {
         }
 
         window.open(`${self.baseAddonsUrl}search.php?search_query=${searchQuery}`, '_blank');
-      }
+      },
     );
   }
 
@@ -918,12 +909,11 @@ class AdminModuleController {
       function initializeBodySortingChange() {
         self.currentSorting = $(this).find(':checked').attr('value');
         self.updateModuleVisibility();
-      }
+      },
     );
   }
 
   doBulkAction(requestedBulkAction) {
-    const self = this;
     // This object is used to check if requested bulkAction is available and give proper
     // url segment to be called for it
     const forceDeletion = $('#force_bulk_deletion').prop('checked');
@@ -941,59 +931,120 @@ class AdminModuleController {
     // Maybe useful to implement this kind of things later if intended to
     // use this functionality elsewhere but "manage my module" section
     if (typeof bulkActionToUrl[requestedBulkAction] === 'undefined') {
-      $.growl.error({message: window.translate_javascripts['Bulk Action - Request not found'].replace('[1]', requestedBulkAction)});
+      $.growl.error(
+        {
+          message: window
+            .translate_javascripts['Bulk Action - Request not found']
+            .replace('[1]', requestedBulkAction),
+        },
+      );
       return false;
     }
 
     // Loop over all checked bulk checkboxes
     const bulkActionSelectedSelector = this.getBulkCheckboxesCheckedSelector();
+    const bulkModuleAction = bulkActionToUrl[requestedBulkAction];
 
     if ($(bulkActionSelectedSelector).length <= 0) {
       console.warn(window.translate_javascripts['Bulk Action - One module minimum']);
       return false;
     }
 
-    const bulkModulesTechNames = [];
+    const modulesActions = [];
     let moduleTechName;
     $(bulkActionSelectedSelector).each(function bulkActionSelector() {
       moduleTechName = $(this).data('tech-name');
-      bulkModulesTechNames.push({
+      modulesActions.push({
         techName: moduleTechName,
         actionMenuObj: $(this).closest('.module-checkbox-bulk-list').next(),
       });
     });
 
-    let actionMenuObj;
-    let urlActionSegment;
-    let urlElement;
-    $.each(bulkModulesTechNames, function bulkModulesLoop(index, data) {
-      actionMenuObj = data.actionMenuObj;
-      moduleTechName = data.techName;
-
-      urlActionSegment = bulkActionToUrl[requestedBulkAction];
-
-      if (typeof self.moduleCardController !== 'undefined') {
-        // We use jQuery to get the specific link for this action. If found, we send it.
-        urlElement = $(
-          self.moduleCardController.moduleActionMenuLinkSelector + urlActionSegment,
-          actionMenuObj
-        );
-
-        if (urlElement.length > 0) {
-          self.moduleCardController._requestToController(
-            urlActionSegment,
-            urlElement,
-            forceDeletion
-          );
-        } else {
-          $.growl.error({message: window.translate_javascripts['Bulk Action - Request not available for module']
-                                        .replace('[1]', urlActionSegment)
-                                        .replace('[2]', moduleTechName)});
-        }
-      }
-    });
+    this.performModulesAction(modulesActions, bulkModuleAction, forceDeletion);
 
     return true;
+  }
+
+  performModulesAction(modulesActions, bulkModuleAction, forceDeletion) {
+    const self = this;
+    if (typeof self.moduleCardController === 'undefined') {
+      return;
+    }
+
+    // First let's filter modules that can't perform this action
+    const actionMenuLinks = filterAllowedActions(modulesActions);
+    if (!actionMenuLinks.length) {
+      return;
+    }
+
+    let modulesRequestedCountdown = actionMenuLinks.length - 1;
+    let spinnerObj = $('<button class="btn-primary-reverse onclick unbind spinner "></button>');
+    if (actionMenuLinks.length > 1) {
+      // Loop through all the modules except the last one which waits for other
+      // requests and then call its request with cache clear enabled
+      $.each(actionMenuLinks, (index, actionMenuLink) => {
+        if (index >= actionMenuLinks.length - 1) {
+          return;
+        }
+        requestModuleAction(actionMenuLink, true, countdownModulesRequest);
+      });
+      // Display a spinner for the last module
+      const lastMenuLink = actionMenuLinks[actionMenuLinks.length - 1];
+      const actionMenuObj = lastMenuLink.closest(self.moduleCardController.moduleItemActionsSelector);
+      actionMenuObj.hide();
+      actionMenuObj.after(spinnerObj);
+    } else {
+      requestModuleAction(actionMenuLinks[0]);
+    }
+
+    function requestModuleAction(actionMenuLink, disableCacheClear, requestEndCallback) {
+      self.moduleCardController.requestToController(
+        bulkModuleAction,
+        actionMenuLink,
+        forceDeletion,
+        disableCacheClear,
+        requestEndCallback,
+      );
+    }
+
+    function countdownModulesRequest() {
+      modulesRequestedCountdown -= 1;
+      // Now that all other modules have performed their action WITHOUT cache clear, we
+      // can request the last module request WITH cache clear
+      if (modulesRequestedCountdown <= 0) {
+        if (spinnerObj) {
+          spinnerObj.remove();
+          spinnerObj = null;
+        }
+
+        const lastMenuLink = actionMenuLinks[actionMenuLinks.length - 1];
+        const actionMenuObj = lastMenuLink.closest(self.moduleCardController.moduleItemActionsSelector);
+        actionMenuObj.fadeIn();
+        requestModuleAction(lastMenuLink);
+      }
+    }
+
+    function filterAllowedActions(actions) {
+      const menuLinks = [];
+      let actionMenuLink;
+      $.each(actions, (index, moduleData) => {
+        actionMenuLink = $(
+          self.moduleCardController.moduleActionMenuLinkSelector + bulkModuleAction,
+          moduleData.actionMenuObj,
+        );
+        if (actionMenuLink.length > 0) {
+          menuLinks.push(actionMenuLink);
+        } else {
+          $.growl.error({
+            message: window.translate_javascripts['Bulk Action - Request not available for module']
+              .replace('[1]', bulkModuleAction)
+              .replace('[2]', moduleData.techName),
+          });
+        }
+      });
+
+      return menuLinks;
+    }
   }
 
   initActionButtons() {
@@ -1015,13 +1066,32 @@ class AdminModuleController {
         }).done(() => {
           $next.fadeOut();
         });
-      }
+      },
     );
 
     // "Upgrade All" button handler
     $('body').on('click', self.upgradeAllSource, (event) => {
       event.preventDefault();
-      $(self.upgradeAllTargets).click();
+
+      if ($(self.upgradeAllTargets).length <= 0) {
+        console.warn(window.translate_javascripts['Upgrade All Action - One module minimum']);
+        return false;
+      }
+
+      const modulesActions = [];
+      let moduleTechName;
+      $(self.upgradeAllTargets).each(function bulkActionSelector() {
+        const moduleItemList = $(this).closest('.module-item-list');
+        moduleTechName = moduleItemList.data('tech-name');
+        modulesActions.push({
+          techName: moduleTechName,
+          actionMenuObj: $('.module-actions', moduleItemList),
+        });
+      });
+
+      this.performModulesAction(modulesActions, 'upgrade');
+
+      return true;
     });
   }
 
@@ -1039,7 +1109,7 @@ class AdminModuleController {
         $(self.categorySelectorLabelSelector).text($(this).data('category-display-name'));
         $(self.categoryResetBtnSelector).show();
         self.updateModuleVisibility();
-      }
+      },
     );
 
     body.on(
@@ -1055,13 +1125,13 @@ class AdminModuleController {
         $(this).hide();
         self.currentRefCategory = null;
         self.updateModuleVisibility();
-      }
+      },
     );
   }
 
   initSearchBlock() {
     const self = this;
-    this.pstaggerInput = $('#module-search-bar').pstagger({
+    self.pstaggerInput = $('#module-search-bar').pstagger({
       onTagsChanged: (tagList) => {
         self.currentTagsList = tagList;
         self.updateModuleVisibility();
@@ -1098,7 +1168,7 @@ class AdminModuleController {
           self.switchSortingDisplayTo(switchTo);
           self.currentDisplay = switchTo;
         }
-      }
+      },
     );
   }
 
@@ -1112,61 +1182,6 @@ class AdminModuleController {
     $(`#module-sort-${switchTo}`).addClass('module-sort-active');
     this.currentDisplay = switchTo;
     this.updateModuleVisibility();
-  }
-
-  initializeSeeMore() {
-    const self = this;
-
-    $(self.seeMoreSelector).on('click', function seeMore() {
-      self.currentCategoryDisplay[$(this).data('category')] = true;
-      $(this).addClass('d-none');
-      $(self.seeLessSelector).removeClass('d-none');
-      self.updateModuleVisibility();
-    });
-
-    $(self.seeLessSelector).on('click', function seeMore() {
-      self.currentCategoryDisplay[$(this).data('category')] = false;
-      $(this).addClass('d-none');
-      $(self.seeMoreSelector).removeClass('d-none');
-      self.updateModuleVisibility();
-    });
-  }
-
-  updateTotalResults() {
-    const replaceFirstWordBy = (element, value) => {
-      const explodedText = element.text().split(' ');
-      explodedText[0] = value;
-      element.text(explodedText.join(' '));
-    };
-
-    // If there are some shortlist: each shortlist count the modules on the next container.
-    const $shortLists = $('.module-short-list');
-    if ($shortLists.length > 0) {
-      $shortLists.each(function shortLists() {
-        const $this = $(this);
-        replaceFirstWordBy(
-          $this.find('.module-search-result-wording'),
-          $this.next('.modules-list').find('.module-item').length
-        );
-      });
-
-      // If there is no shortlist: the wording directly update from the only module container.
-    } else {
-      const modulesCount = $('.modules-list').find('.module-item').length;
-      replaceFirstWordBy($('.module-search-result-wording'), modulesCount);
-
-      const selectorToToggle = (self.currentDisplay === self.DISPLAY_LIST) ?
-                               this.addonItemListSelector :
-                               this.addonItemGridSelector;
-      $(selectorToToggle).toggle(modulesCount !== (this.modulesList.length / 2));
-
-      if (modulesCount === 0) {
-        $('.module-addons-search-link').attr(
-          'href',
-          `${this.baseAddonsUrl}search.php?search_query=${encodeURIComponent(this.currentTagsList.join(' '))}`
-        );
-      }
-    }
   }
 }
 
